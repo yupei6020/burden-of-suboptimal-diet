@@ -1,0 +1,217 @@
+################################################世界——2 gamma#######################
+# 加载设置脚本，该脚本可能包含了路径设置和其他通用配置
+source("code/0_setup.R")
+
+# 设置膳食因素、疾病名称和版本号的变量，方便后续修改和引用
+factor <- "fruits"  # 设置膳食因素
+#version <- "all"  # 设置疾病名称(全因死亡all-cause)
+v <- "06"     # 根据饮食因素修改文件号
+
+# 读取全球估计的数据集，使用变量v来动态生成文件路径
+potatoes_AFG=read_csv(paste0(GDD_directory, "Global estimates/v", v, "_global.csv")) 
+
+# 从原始数据中筛选特定的列和满足特定条件的行
+# 这里筛选了1990年和2018年，年龄大于20，排除了缺失数据标记为999的行
+# 注意修改条件以满足具体的数据需求
+potatoes=potatoes_AFG %>% select(age,female,urban,edu,year,median,upperci_95,lowerci_95) %>%
+  filter(year %in% c(1990,2018),age>20,
+         female != 999, # 红肉female! = 999改为female == 999
+         urban!=999,edu!=999,age!=999
+)
+
+# 重命名列名age为age_average
+potatoes=potatoes %>% rename(age_average=age)
+
+# 计算标准差，使用95%置信区间的上下限
+potatoes = potatoes %>% mutate(sd=(upperci_95-lowerci_95)/(2*qnorm(0.975)))
+
+# 删除原始数据集以节省内存
+rm(potatoes_AFG)
+
+########## 生成gamma分布
+# 生成伽玛分布参数列表，分别为2018年和1990年的数据
+# 修改迭代次数
+gammalist2018=gammaGDD1000(GDD_ditery = potatoes,YEAR = "2018",iters=500)
+gammalist1990=gammaGDD1000(GDD_ditery = potatoes,YEAR = "1990",iters=500)
+
+# 保存合并后的伽玛分布参数到文件
+# 文件名动态生成，根据膳食因素和疾病变量进行命名
+# 创建目录，如果不存在的话
+dir.create(paste0(gamma_directory,"World/"))
+gamma_distribution1000=rbind(gammalist1990[[1]],gammalist2018[[1]]) %>% select(2,1,3)
+save(gamma_distribution1000,file = paste0(gamma_directory, "World/", "world_", factor, "_", version, "500.Rdata"))
+
+# 查看数据结构
+str(gamma_distribution1000)
+
+# 计算伽玛分布的均值
+gamma_distribution1000$mean <- gamma_distribution1000$shape / gamma_distribution1000$rate
+
+# 按年份分组并计算均值
+library(dplyr)
+
+gamma_mean_by_year <- gamma_distribution1000 %>%
+  group_by(year) %>%
+  summarise(mean_value = mean(mean))
+
+# 查看结果
+print(gamma_mean_by_year)
+
+###############################################年龄分层 红肉记得改########################################
+source("code/0_setup.R")
+# 设置膳食因素、疾病名称和数据版本的变量，方便后续修改和引用
+factor <- "yogurt" # 红肉female! = 999改为female == 999
+version <- "all"
+v <- "14" 
+
+# 定义要处理的年龄组
+ages <- c(22.5, 27.5, 32.5, 37.5, 42.5, 47.5, 52.5, 57.5, 62.5, 67.5, 72.5, 77.5, 82.5, 87.5, 92.5, 97.5)
+
+# 加载全球估计的数据集，使用变量v来动态生成文件路径
+potatoes_AFG=read_csv(paste0(GDD_directory, "Global estimates/v", v, "_global.csv"))
+
+for (x in ages) {
+  # 筛选特定年龄组的数据
+  potatoes <- potatoes_AFG %>%
+    select(age, female, urban, edu, year, median, upperci_95, lowerci_95) %>%
+    filter(year %in% c(1990, 2018), age > 20, female != 999, # 红肉female != 999改为female == 999
+           urban != 999, edu != 999, 
+           age == x) %>%
+    rename(age_average = age) %>%
+    mutate(sd = (upperci_95 - lowerci_95) / (2 * qnorm(0.975)))
+  
+  # 根据年份运行gammaGDD1000函数，生成伽玛分布参数列表
+  gammalist2018 <- gammaGDD1000(GDD_ditery = potatoes, YEAR = "2018", iters = 500)
+  gammalist1990 <- gammaGDD1000(GDD_ditery = potatoes, YEAR = "1990", iters = 500)
+  
+  # 合并1990年和2018年的结果，并选择需要的列
+  gamma_distribution1000 <- rbind(gammalist1990[[1]], gammalist2018[[1]]) %>% 
+    select(2, 1, 3)
+  
+  # 创建目录，如果不存在的话
+  dir.create(paste0(gamma_directory,"World/fenceng/",x,"/"))
+  
+  # 保存结果，文件名动态生成，包含膳食因素、疾病和当前年龄值
+  save(gamma_distribution1000, file = paste0(gamma_directory, "World/fenceng/",x,"/", "world_", factor, "_", x, "_", version, "500.Rdata"))
+}
+
+###############################################性别分层 红肉记得改(把除age和female别的改成==999）########################################
+source("code/0_setup.R")
+
+# 设置膳食因素、疾病名称和数据版本的变量，方便后续修改和引用——可以用前面的，一起跑
+factor <- "vegetables"
+#version <- "all"
+v <- "02"
+
+# 定义性别数组
+sex <- c(0, 1)
+
+# 加载全球估计的数据集，使用变量v来动态生成文件路径
+potatoes_AFG=read_csv(paste0(GDD_directory, "Global estimates/v", v, "_global.csv"))
+
+for (x in sex) {
+  # 筛选特定性别的数据
+  potatoes <- potatoes_AFG %>%
+    select(age, female, urban, edu, year, median, upperci_95, lowerci_95) %>%
+    filter(year %in% c(1990, 2018), age > 20, female == x, urban != 999, edu != 999, age != 999) %>%
+    rename(age_average = age) %>%
+    mutate(sd = (upperci_95 - lowerci_95) / (2 * qnorm(0.975)))
+  
+  # 根据性别定义文件名中的标识
+  name <- ifelse(x==0,"Male","Female")
+  
+  # 根据年份运行gammaGDD1000函数，生成伽玛分布参数列表
+  gammalist2018 <- gammaGDD1000(GDD_ditery = potatoes, YEAR = "2018", iters = 500)
+  gammalist1990 <- gammaGDD1000(GDD_ditery = potatoes, YEAR = "1990", iters = 500)
+  
+  # 合并1990年和2018年的结果，并选择需要的列
+  gamma_distribution1000 <- rbind(gammalist1990[[1]], gammalist2018[[1]]) %>%
+    select(2, 1, 3)
+  
+  # 创建目录，如果不存在的话
+  dir.create(paste0(gamma_directory,"World/fenceng/",name,"/"))
+  
+  # 保存结果，文件名动态生成，包含膳食因素、疾病和性别标识
+  save(gamma_distribution1000, file = paste0(gamma_directory, "World/fenceng/",name,"/", "world_", factor, "_", name, "_", version, "500.Rdata"))
+}
+
+###############################################城乡分层 红肉记得改###############################
+source("code/0_setup.R")
+
+# 设置膳食因素、疾病名称和数据版本的变量，方便后续修改和引用——可以用前面的，一起跑
+factor <- "unprocessed red meat" # 红肉female! = 999改为female == 999
+version <- "all"
+v <- "10" 
+
+# 定义居住地区变量
+juzhu <- c(0, 1) # 红肉female! = 999改为female == 999
+
+# 加载全球估计的数据集，使用变量v来动态生成文件路径
+potatoes_AFG=read_csv(paste0(GDD_directory, "Global estimates/v", v, "_global.csv"))
+
+for (x in juzhu) {
+  # 筛选特定居住地区的数据
+  potatoes <- potatoes_AFG %>%
+    select(age, female, urban, edu, year, median, upperci_95, lowerci_95) %>%
+    filter(year %in% c(1990, 2018), age > 20, female == 999, # 红肉female! = 999改为female == 999
+           urban == x, edu != 999, age != 999) %>%
+    rename(age_average = age) %>%
+    mutate(sd = (upperci_95 - lowerci_95) / (2 * qnorm(0.975)))
+  
+  # 根据居住地区定义文件名中的标识
+  name <- ifelse(x==0,"Rural","Urban")
+  
+  # 根据年份运行gammaGDD1000函数，生成伽玛分布参数列表
+  gammalist2018 <- gammaGDD1000(GDD_ditery = potatoes, YEAR = "2018", iters = 500)
+  gammalist1990 <- gammaGDD1000(GDD_ditery = potatoes, YEAR = "1990", iters = 500)
+  
+  # 合并1990年和2018年的结果，并选择需要的列
+  gamma_distribution1000 <- rbind(gammalist1990[[1]], gammalist2018[[1]]) %>%
+    select(2, 1, 3)
+  
+  # 创建目录，如果不存在的话
+  dir.create(paste0(gamma_directory,"World/fenceng/",name,"/"))
+  
+  # 保存结果，文件名动态生成，包含膳食因素、疾病和居住地区标识
+  save(gamma_distribution1000, file = paste0(gamma_directory, "World/fenceng/",name,"/", "world_", factor, "_", name, "_", version, "500.Rdata"))
+}
+###############################################教育分层 红肉记得改###############################
+source("code/0_setup.R")
+
+# 设置膳食因素、疾病名称和数据版本的变量，方便后续修改和引用
+factor <- "unprocessed red meat" # 红肉female! = 999改为female == 999
+version <- "all"
+v <- "09" 
+
+# 定义教育水平变量
+edu <- c(1, 2, 3) # 红肉female! = 999改为female == 999
+
+# 加载全球估计的数据集，使用变量v来动态生成文件路径
+potatoes_AFG=read_csv(paste0(GDD_directory, "Global estimates/v", v, "_global.csv"))
+
+for (x in edu) {
+  # 筛选特定教育水平的数据
+  potatoes <- potatoes_AFG %>%
+    select(age, female, urban, edu, year, median, upperci_95, lowerci_95) %>%
+    filter(year %in% c(1990, 2018), age > 20, female == 999, # 红肉female! = 999改为female == 999
+           urban != 999, edu == x, age != 999) %>%
+    rename(age_average = age) %>%
+    mutate(sd = (upperci_95 - lowerci_95) / (2 * qnorm(0.975)))
+  
+  # 根据教育水平定义文件名中的标识
+  name <- ifelse(x==1,"Low",ifelse(x==2,"Medium","High"))
+  
+  # 根据年份运行gammaGDD1000函数，生成伽玛分布参数列表
+  gammalist2018 <- gammaGDD1000(GDD_ditery = potatoes, YEAR = "2018", iters = 500)
+  gammalist1990 <- gammaGDD1000(GDD_ditery = potatoes, YEAR = "1990", iters = 500)
+  
+  # 合并1990年和2018年的结果，并选择需要的列
+  gamma_distribution1000 <- rbind(gammalist1990[[1]], gammalist2018[[1]]) %>%
+    select(2, 1, 3)
+  
+  # 创建目录，如果不存在的话
+  dir.create(paste0(gamma_directory,"World/fenceng/",name,"/"))
+  
+  # 保存结果，文件名动态生成，包含膳食因素、疾病和教育水平标识
+  save(gamma_distribution1000, file = paste0(gamma_directory, "World/fenceng/",name,"/", "world_", factor, "_", name, "_", version, "500.Rdata"))
+}
