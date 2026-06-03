@@ -1,0 +1,86 @@
+######################################################## 4 joint-PAF#######################
+# 加载设置脚本
+source("code/0_setup.R")
+
+############ 计算1000次joint PAF
+# 计算1000次联合PAF
+# 获取指定目录下所有符合条件的文件的完整路径
+#version <- "all"
+files=list.files(path=paste0(paf_directory,"World"), pattern = "500.csv", full.names = T, recursive = FALSE)
+# 使用joint_PAF函数计算联合PAF
+PAF_outcomes <- joint_PAF(files=files)
+PAF_outcomes
+# 将计算得到的联合PAF结果保存为CSV文件
+write_csv(PAF_outcomes,file = paste0(paf_directory,"World/","PAF_outcomes.csv"))
+
+dir.create(paste0(table_directory,"World/"))
+write_csv(PAF_outcomes,file = paste0(table_directory,"World/","world_", version ,".csv"))
+
+# 使用ggplot绘制联合PAF的密度图
+# ggplot(data=PAF,aes(x=jointPAF)) + geom_density()
+########################################区域#######################################
+source("code/0_setup.R")
+############ 计算1000次joint PAF
+# 计算1000次联合PAF
+# 获取指定目录下所有符合条件的文件的完整路径          
+region <- "FSU"  # Asia  FSU  HIC LAC  MENA  SAARC  SSA
+#version <- "CRC"
+files=list.files(path=paste0(paf_directory,"Regional/",region,"/"), pattern = "500.csv", full.names = T, recursive = FALSE)
+# 使用joint_PAF函数计算联合PAF
+PAF_outcomes <- joint_PAF(files=files)
+PAF_outcomes
+# 将计算得到的联合PAF结果保存为CSV文件
+write_csv(PAF_outcomes,file = paste0(paf_directory,"Regional/",region,"/","PAF_outcomes.csv"))
+
+dir.create(paste0(table_directory,"Regional/"))
+write_csv(PAF_outcomes,file = paste0(table_directory,"Regional/",region,"_", version ,".csv"))
+
+########################################国家#######################################
+source("code/0_setup.R")
+install.packages("mice")
+library(mice)
+data <- read.csv("D:/studio/dietary/data/PAF/all/cn/CRI/processed meat_all500.csv")
+imputed_data <- mice(data, m = 5, method = "pmm", seed = 123)
+complete_data <- complete(imputed_data, 1)
+summary(complete_data)
+write.csv(complete_data, "D:/studio/dietary/data/PAF/all/cn/CRI/processed meat_all500.csv", row.names = FALSE)
+
+############ 计算1000次joint PAF
+# 计算1000次联合PAF
+# 定义目录路径
+
+# 获取指定目录下所有符合条件的文件的完整路径
+# 从数据集中提取所有不同的国家代码
+potatoes_AFG <- read_csv(paste0(GDD_directory, "Country-level estimates/v01_cnty.csv")) # 随便读取一个数据集
+countries <- unique(potatoes_AFG$iso3)
+countries
+nm <- "VNM"  # 从countries里面选（这个要跑好久就不设置循环了）
+#version <- "all"
+files=list.files(path=paste0(paf_directory,"cn/",nm,"/"), pattern = "500.csv", full.names = T, recursive = FALSE)
+# 使用joint_PAF函数计算联合PAF
+PAF_outcomes <- joint_PAF(files=files)
+PAF_outcomes
+# 将计算得到的联合PAF结果保存为CSV文件
+write_csv(PAF_outcomes,file = paste0(paf_directory,"cn/",nm,"/","PAF_outcomes.csv"))
+
+dir.create(paste0(table_directory,"cn/"))
+write_csv(PAF_outcomes,file = paste0(table_directory,"cn/",nm,"_", version ,".csv"))
+
+########################################世界——分层#######################################
+source("code/0_setup.R")
+############ 计算1000次joint PAF
+# 计算1000次联合PAF
+# 获取指定目录下所有符合条件的文件的完整路径          
+# 22.5, 27.5, 32.5, 37.5, 42.5, 47.5, 52.5, 57.5, 62.5, 67.5, 72.5, 77.5, 82.5, 87.5, 92.5, 97.5
+# "Male","Female","Rural","Urban","Low","Medium","High" 
+x <- "Male"  # 根据上面两行更改
+#version <- "all"
+files=list.files(path=paste0(paf_directory,"World/fenceng/",x,"/"), pattern = "500.csv", full.names = T, recursive = FALSE)
+# 使用joint_PAF函数计算联合PAF
+PAF_outcomes <- joint_PAF(files=files)
+PAF_outcomes
+# 将计算得到的联合PAF结果保存为CSV文件
+write_csv(PAF_outcomes,file = paste0(paf_directory,"World/fenceng/",x,"/","PAF_outcomes.csv"))
+
+dir.create(paste0(table_directory,"World/fenceng/"))
+write_csv(PAF_outcomes,file = paste0(table_directory,"World/fenceng/",x,"_", version ,".csv"))
