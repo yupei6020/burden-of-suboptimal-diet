@@ -1,0 +1,346 @@
+######################################################## 3.1 PAF########################
+source("code/0_setup.R")
+# 设置膳食因素和疾病名称的变量，方便后续修改和引用
+factor <- "fish"
+#version <- "all"
+tmred <- 50
+unit <- 100
+riskfactor <- 0.5 # XXX_riskfactor如果＞1，就是危险因素1.5，如果＜1就是保护因素0.5
+
+# 加载相关的gamma分布和相对风险数据
+load(paste0(gamma_directory, "World/", "world_", factor, "_", version, "500.Rdata")) 
+load(paste0(RR_directory, "world_", factor, "_", version, ".Rdata")) 
+rm(tm)
+
+# 计算年龄比例
+age_percentage <- read_csv(paste0(pop_directory, "pop.csv")) %>%
+  select(Location, Time, PopTotal, AgeGrpStart) %>%
+  filter(Location == "World", Time %in% c(1990, 2018), AgeGrpStart >= 20) %>%
+  mutate(PopTotal = ifelse(AgeGrpStart == 95, PopTotal + lead(PopTotal, default = 0), PopTotal)) %>%
+  filter(AgeGrpStart != 100) %>%
+  rename(year = Time) %>%
+  mutate(agegroup_id = AgeGrpStart / 5 - 3) %>%
+  select(agegroup_id, PopTotal, year)
+
+age_percentage_wave <- age_percentage
+
+# 准备循环年份和对应的PAF结果列表
+years <- c(1990, 2018)
+PAF_results <- list()
+
+# 循环计算PAF
+for (yr in years) {
+  age_percentage <- age_percentage_wave %>%
+    filter(year == yr) %>%
+    mutate(sum = sum(PopTotal), pop = PopTotal / sum) %>%
+    select(pop, agegroup_id)
+  
+  ########### XXX_riskfactor如果＞1，就是危险因素1.5，如果＜1就是保护因素0.5，
+  PAF_current <- PAFcalc1000(XXX_riskfactor = riskfactor, XXX_year = yr, XXX_iters = 500, XXX_tmred_mean = tmred, XXX_unit = unit,
+                             dietary_data = dietary_data, gamma_distribution1000 = gamma_distribution1000) %>%
+    mutate(year = yr)
+  
+  PAF_results[[as.character(yr)]] <- PAF_current
+}
+
+# 使用paste函数构造新的列名，这里移除了sex变量，因为不区分性别
+new_col_name <- paste0("PAF_", version, "_", factor)
+
+# 合并PAF结果并动态重命名列
+PAF_total <- do.call(rbind, PAF_results) %>%
+  ungroup() %>%
+  rowid_to_column("id") %>%
+  select(`sum(PAF_pop)`, year, id) %>%
+  rename(!!new_col_name := `sum(PAF_pop)`)
+
+# 确保目录存在
+dir.create(paste0(paf_directory, "World/"), recursive = TRUE)
+
+# 保存总的PAF结果
+save(PAF_total, file = paste0(paf_directory, "World/", factor, "_", version, "500.Rdata"))
+write_csv(PAF_total, file = paste0(paf_directory, "World/", factor, "_", version, "500.csv"))
+
+
+######################################################## 区域 PAF 计算 ##########################################
+source("code/0_setup.R")
+
+# 设置区域代码、膳食因素、疾病名称的变量
+nm <- "SSA"  # Asia  FSU  HIC LAC  MENA  SAARC  SSA 
+factor <- "vegetables"
+#version <- "all"
+tmred <- 300
+unit <- 100
+riskfactor <- 0.5 # XXX_riskfactor如果＞1，就是危险因素1.5，如果＜1就是保护因素0.5
+
+# 创建一个nm到Location的映射
+nm_to_location <- list(
+  SSA = "Sub-Saharan Africa",
+  Asia = "Eastern and South-Eastern Asia",
+  HIC = "High-income countries",
+  LAC = "Latin America and the Caribbean",
+  MENA = "Middle East and North Africa",
+  SAARC = "South Asia"
+)
+
+# 使用nm变量从映射中获取Location
+location_filter <- nm_to_location[[nm]]
+
+# 加载相对风险和gamma分布数据
+load(paste0(RR_directory, "world_", factor, "_", version, ".Rdata"))
+load(paste0(gamma_directory, "Regional/", nm, "/", nm, "_", factor, "_", version, "500.Rdata"))
+rm(tm)
+
+# 计算年龄比例
+age_percentage <- read_csv(paste0(pop_directory, "pop.csv")) %>%
+  select(Location, Time, PopTotal, AgeGrpStart) %>%
+  
+  # 计算年龄比例 修改区域code: "Southern Asia"  "Sub-Saharan Africa"  "Northern Africa and Western Asia"
+  # "Latin America and the Caribbean" "Eastern and South-Eastern Asia"  "High-income countries" 
+  filter(Location == location_filter, Time %in% c(1990, 2018), AgeGrpStart >= 20) %>%
+  mutate(PopTotal = ifelse(AgeGrpStart == 95, PopTotal + lead(PopTotal, default = 0), PopTotal)) %>%
+  filter(AgeGrpStart != 100) %>%
+  rename(year = Time) %>%
+  mutate(agegroup_id = AgeGrpStart / 5 - 3) %>%
+  select(agegroup_id, PopTotal, year)
+
+age_percentage_wave <- age_percentage
+
+# 确保目录存在
+dir.create(paste0(paf_directory, "Regional/", nm, "/"), recursive = TRUE)
+
+# 循环计算1990年和2018年的PAF，并保存结果
+PAF_results <- list()
+years <- c(1990, 2018)
+for (yr in years) {
+  age_percentage <- age_percentage_wave %>%
+    filter(year == yr) %>%
+    mutate(sum = sum(PopTotal), pop = PopTotal / sum) %>%
+    select(pop, agegroup_id)
+  
+  ######################################################## XXX_riskfactor如果＞1，就是危险因素1.5，如果＜1就是保护因素0.5，
+  PAF_current <- PAFcalc1000(XXX_riskfactor = riskfactor, XXX_year = yr, XXX_iters = 500, 
+                             XXX_tmred_mean = tmred, XXX_unit = unit,
+                             dietary_data = dietary_data, gamma_distribution1000 = gamma_distribution1000) %>%
+    mutate(year = yr)
+  
+  # 保存PAF结果
+  save(PAF_current, file = paste0(paf_directory, "Regional/", nm, "/", factor, "_", version, "500_", year, ".Rdata"))
+  PAF_results[[as.character(yr)]] <- PAF_current
+}
+
+# 合并PAF结果并动态重命名列
+new_col_name <- paste0("PAF_", version, "_", factor)
+PAF_total <- do.call(rbind, PAF_results) %>%
+  ungroup() %>%
+  rowid_to_column("id") %>%
+  select(`sum(PAF_pop)`, year, id) %>%
+  rename(!!new_col_name := `sum(PAF_pop)`)
+
+# 保存总的PAF结果
+save(PAF_total, file = paste0(paf_directory, "Regional/", nm, "/", factor, "_", version, "500.Rdata"))
+write_csv(PAF_total, file = paste0(paf_directory, "Regional/", nm, "/", factor, "_", version, "500.csv"))
+
+######################################################## 区域——前苏联 ############################
+source("code/0_setup.R")
+
+# 设置区域代码、膳食因素、疾病名称的变量
+nm <- "FSU"  # 前苏联
+factor <- "vegetables"
+#version <- "all"
+tmred <- 300
+unit <- 100
+riskfactor <- 0.5 # XXX_riskfactor如果＞1，就是危险因素1.5，如果＜1就是保护因素0.5
+
+
+# 加载相对风险和gamma分布数据
+load(paste0(RR_directory, "world_", factor, "_", version, ".Rdata"))
+load(paste0(gamma_directory, "Regional/", nm, "/", nm, "_", factor, "_", version, "500.Rdata"))
+rm(tm)
+
+# 读取并处理人口数据
+age_percentage <- read_csv(paste0(pop_directory, "pop_FSU.csv")) %>%
+  select(Location, Time, PopTotal, AgeGrpStart) %>%
+  filter(Location == "FSU", Time %in% c(1990, 2018), AgeGrpStart >= 20) %>%
+  mutate(PopTotal = ifelse(AgeGrpStart == 95, PopTotal + lead(PopTotal, default = 0), PopTotal)) %>%
+  filter(AgeGrpStart != 100) %>%
+  rename(year = Time) %>%
+  mutate(agegroup_id = AgeGrpStart / 5 - 3) %>%
+  select(agegroup_id, PopTotal, year)
+
+age_percentage_wave <- age_percentage
+
+# 确保目录存在
+dir.create(paste0(paf_directory, "Regional/", nm, "/"), recursive = TRUE)
+
+# 循环计算1990年和2018年的PAF，并保存结果
+PAF_results <- list()
+years <- c(1990, 2018)
+for (yr in years) {
+  age_percentage <- age_percentage_wave %>%
+    filter(year == yr) %>%
+    mutate(sum = sum(PopTotal), pop = PopTotal / sum) %>%
+    select(pop, agegroup_id)
+  
+  ######################################################## XXX_riskfactor如果＞1，就是危险因素1.5，如果＜1就是保护因素0.5，
+  PAF_current <- PAFcalc1000(XXX_riskfactor = riskfactor, XXX_year = yr, XXX_iters = 500, 
+                             XXX_tmred_mean = tmred, XXX_unit = unit,
+                             dietary_data = dietary_data, gamma_distribution1000 = gamma_distribution1000) %>%
+    mutate(year = yr)
+  
+  # 保存PAF结果
+  save(PAF_current, file = paste0(paf_directory, "Regional/", nm, "/", factor, "_", version, "500_", year, ".Rdata"))
+  PAF_results[[as.character(yr)]] <- PAF_current
+}
+
+# 使用paste函数构造新的列名，仅结合了膳食因素（factor）和版本（version）变量
+new_col_name <- paste0("PAF_", version, "_", factor)
+
+# 合并PAF结果并动态重命名列
+PAF_total <- do.call(rbind, PAF_results) %>%
+  ungroup() %>%
+  rowid_to_column("id") %>%
+  select(`sum(PAF_pop)`, year, id) %>%
+  rename(!!new_col_name := `sum(PAF_pop)`)
+
+# 保存总的PAF结果
+save(PAF_total, file = paste0(paf_directory, "Regional/", nm, "/", factor, "_", version, "500.Rdata"))
+write_csv(PAF_total, file = paste0(paf_directory, "Regional/", nm, "/", factor, "_", version, "500.csv"))
+
+######################################################## 单个国家 PAF 计算 ###################################
+source("code/0_setup.R")
+# 假设GDD_directory已经被正确设置
+potatoes_AFG <- read_csv(paste0(GDD_directory, "Country-level estimates/v01_cnty.csv")) # 随便读取一个数据集
+countries <- unique(potatoes_AFG$iso3)
+countries
+
+# 设置国家代码、膳食因素、疾病名称的变量，方便后续修改和引用
+nm <- "AFG"  
+factor <- "vegetables"
+#version <- "all"
+tmred <- 300
+unit <- 100
+riskfactor <- 0.5 # riskfactor如果＞1，就是危险因素1.5，如果＜1就是保护因素0.5
+
+
+# 加载相对风险和gamma分布数据
+load(paste0(RR_directory, "world_", factor, "_", version, ".Rdata"))
+load(paste0(gamma_directory, nm, "/", nm, "_", factor, "_", version, "500.Rdata"))
+rm(tm)
+
+# 计算年龄比例
+age_percentage <- read_csv(paste0(pop_directory, "pop.csv")) %>%
+  select(ISO3_code, Time, PopTotal, AgeGrpStart) %>%
+  filter(ISO3_code == nm, Time %in% c(1990, 2018), AgeGrpStart >= 20) %>%
+  mutate(PopTotal = ifelse(AgeGrpStart == 95, PopTotal + lead(PopTotal, default = 0), PopTotal)) %>%
+  filter(AgeGrpStart != 100) %>%
+  rename(year = Time) %>%
+  mutate(agegroup_id = AgeGrpStart / 5 - 3) %>%
+  select(agegroup_id, PopTotal, year)
+
+age_percentage_wave <- age_percentage
+
+# 准备循环年份和对应的PAF结果列表
+years <- c(1990, 2018)
+PAF_results <- list()
+
+# 循环计算PAF
+for (yr in years) {
+  age_percentage <- age_percentage_wave %>%
+    filter(year == yr) %>%
+    mutate(sum = sum(PopTotal), pop = PopTotal / sum) %>%
+    select(pop, agegroup_id)
+  
+  ################################################### XXX_riskfactor如果＞1，就是危险因素1.5，如果＜1就是保护因素0.5，
+  PAF_current <- PAFcalc1000(XXX_riskfactor = riskfactor, XXX_year = yr, XXX_iters = 500, 
+                             XXX_tmred_mean = tmred, XXX_unit = unit, 
+                             dietary_data = dietary_data, gamma_distribution1000 = gamma_distribution1000) %>%
+    mutate(year = yr)
+  
+  PAF_results[[as.character(yr)]] <- PAF_current
+}
+
+# 确保目录存在
+dir.create(paste0(paf_directory, nm, "/"), recursive = TRUE)
+
+# 保存每个年份的PAF结果
+for (yr in years) {
+  save(PAF_results[[as.character(yr)]], file = paste0(paf_directory, nm, "/", factor, "_", version, "500_", yr, ".Rdata"))
+}
+
+# 使用paste函数构造新的列名，仅结合了膳食因素（factor）和版本（version）变量
+new_col_name <- paste0("PAF_", version, "_", factor)
+
+# 合并PAF结果并动态重命名列
+PAF_total <- do.call(rbind, PAF_results) %>%
+  ungroup() %>%
+  rowid_to_column("id") %>%
+  select(`sum(PAF_pop)`, year, id) %>%
+  rename(!!new_col_name := `sum(PAF_pop)`)
+
+# 保存总的PAF结果
+save(PAF_total, file = paste0(paf_directory, nm, "/", factor, "_", version, "500.Rdata"))
+write_csv(PAF_total, file = paste0(paf_directory, nm, "/", factor, "_", version, "500.csv"))
+
+
+######################################################## 世界分层——性别########################
+source("code/0_setup.R")
+
+# 定义膳食因素、疾病名称和性别变量以便将来修改
+factor <- "SSB"
+#version <- "all"
+sex <- "Male" # "Female" "Male"
+tmred <- 0
+unit <- 250
+riskfactor <- 1.5 # XXX_riskfactor如果＞1，就是危险因素1.5，如果＜1就是保护因素0.5
+
+
+# 加载相对风险和gamma分布数据
+load(paste0(gamma_directory, "World/fenceng/", sex, "/", "world_", factor, "_", sex, "_", version, "500.Rdata"))
+load(paste0(RR_directory, "world_", factor, "_", version, ".Rdata"))
+rm(tm)
+
+# 计算年龄比例
+age_percentage <- read_csv(paste0(pop_directory, "pop.csv")) %>%
+  select(Location, Time, PopTotal = ifelse(sex == "Male", "PopMale", "PopFemale"), AgeGrpStart) %>%
+  filter(Location == "World", Time %in% c(1990, 2018), AgeGrpStart >= 20) %>%
+  mutate(PopTotal = ifelse(AgeGrpStart == 95 & Time == 1990, PopTotal[str_which(AgeGrpStart,"95")][1] + PopTotal[str_which(AgeGrpStart,"100")][1], PopTotal)) %>%
+  mutate(PopTotal = ifelse(AgeGrpStart == 95 & Time == 2018, PopTotal[str_which(AgeGrpStart,"95")][2] + PopTotal[str_which(AgeGrpStart,"100")][2], PopTotal)) %>%
+  filter(AgeGrpStart != 100) %>%
+  rename(year = Time) %>%
+  mutate(agegroup_id = AgeGrpStart / 5 - 3) %>%
+  select(agegroup_id, PopTotal, year)
+
+age_percentage_wave <- age_percentage
+
+# 循环计算1990年和2018年的PAF并保存
+PAF_results <- list()
+years <- c(1990, 2018)
+for (yr in years) {
+  age_percentage <- age_percentage_wave %>%
+    filter(year == yr) %>%
+    mutate(sum = sum(PopTotal), pop = PopTotal / sum) %>%
+    select(pop, agegroup_id)
+  
+  ########### XXX_riskfactor如果＞1，就是危险因素1.5，如果＜1就是保护因素0.5，
+  PAF_current <- PAFcalc1000(XXX_riskfactor = riskfactor, XXX_year = yr, XXX_iters = 500, XXX_tmred_mean = tmred, XXX_unit = unit, 
+                             dietary_data = dietary_data, gamma_distribution1000 = gamma_distribution1000) %>%
+    mutate(year = yr)
+  
+  PAF_results[[as.character(yr)]] <- PAF_current
+}
+
+# 使用paste函数构造新的列名，仅结合了膳食因素（factor）和版本（version）变量
+new_col_name <- paste0("PAF_", version, "_", factor)
+
+PAF_total <- do.call(rbind, PAF_results) %>%
+  ungroup() %>%
+  rowid_to_column("id") %>%
+  select(`sum(PAF_pop)`, year, id) %>%
+  rename(!!new_col_name := `sum(PAF_pop)`) # 动态重命名列
+
+# 确保目录存在
+dir.create(paste0(paf_directory, "World/fenceng/", sex, "/"), recursive = TRUE)
+
+# 保存总的PAF结果
+save(PAF_total, file = paste0(paf_directory, "World/fenceng/", sex, "/", factor, "_", version, "500.Rdata"))
+write_csv(PAF_total, file = paste0(paf_directory, "World/fenceng/", sex, "/", factor, "_", version, "500.csv"))
